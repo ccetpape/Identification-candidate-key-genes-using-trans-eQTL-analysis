@@ -1,0 +1,107 @@
+---
+title: "TwoSampleMR"
+output: html_document
+date: "2025-08-28"
+params:
+  trait: "SLE3"
+  
+  ## script for Mendelian randomazation of GWAS for multiple immune mediated diseases (SLE3, IBD, UC, CD, T1DM, RA, MS, CE, ASTH, AS)  
+---
+
+```{r}
+install.packages("TwoSampleMR", repos = c("https://mrcieu.r-universe.dev", "https://cloud.r-project.org"))
+install.packages("data.table")
+install.packages("arrow")
+install.packages("dbplyr")
+install.packages("remotes")
+install.packages("dplyr)")
+```
+
+```{r}
+library(TwoSampleMR)
+library(data.table)  
+library(arrow)
+library(dbplyr)
+library(remotes)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+```{r}
+file_sumstats_eqtl <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/users/umcg-cpape/sumstats_eqtls_SLE.txt" # change names
+sumstats_eqtl <- fread(file_sumstats_eqtl)
+
+# Get relevant genes for trait x (SLE3, IBD, UC, CD, T1DM, RA, MS, CE, ASTH, AS)
+file_freq <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/users/umcg-cpape/total_frequency_table_SLE.txt" # change names
+genes <- fread(file_freq) 
+# select genes of trait 
+genes_sel <- genes$phenotype[genes$n_trans_eqtls >1 ] # | genes$n_trans_eqtls == 1 
+genes_sel <- na.omit(genes_sel)
+```
+
+```{r}
+# datasets
+
+# eQTLgen: exposure
+file_eQTL <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/fine_mapping/output/genome_wide_finemapping_susie_20250314/finemapped/fix_20250509/independent_variants_filtered_lbf2_mlog10p5_annotated_20250827_filtered-maxR2_0.5-noHla-noCrossmapping.txt.gz"
+finemap_eqtl <- fread(file_eQTL)
+
+sum_eqtl <- finemap_eqtl[finemap_eqtl$phenotype %in% genes_sel]
+exposure_data <- sum_eqtl
+```
+
+```{r}
+# GWAS: outcome
+
+# Open dataset GWAS 
+ds <- open_dataset("/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/public_data/linking_disease_relevant_genes/harmonized/eqtlgen_parquet_dataset")
+# Load gwas summary stats for a specific trait
+summary_stats <- ds %>% dplyr::filter(gwas_id == params$trait) %>% dplyr::collect() 
+
+# For every finemapped eQTL variant, select the variant from summary stats
+outcome_data <- summary_stats[summary_stats$variant %in% sum_eqtl$variant]
+```
+
+```{r} 
+# change column names 
+exposure_data <- exposure_data  %>%
+  rename(SNP=variant, id.exposure=phenotype, exposure=gene_name, beta.exposure=beta, se.exposure=standard_error, effect_allele.exposure=eff_allele, other_allele.exposure=non_eff_allele)
+  
+outcome_data <- outcome_data %>% 
+  rename(SNP=variant, id.outcome=gwas_id, beta.outcome=beta, se.outcome=se, effect_allele.outcome=str_allele2, other_allele.outcome=str_allele1) %>%
+  mutate(outcome = id.outcome)
+
+# datasets harmoniseren
+harmonised_data <- harmonise_data(exposure_data, outcome_data)
+write.table(harmonised_data, "harmonized_data_ms.txt", sep=";", col.names=T, row.names=F)
+```
+```{r}
+# MR analysis
+mr_results <- mr(harmonised_data)
+write.table(mr_results, "mr_results_ms.txt", sep=";", col.names=T, row.names=F) # change name
+```
+```{r}
+mr_results_proc <- mr_results %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_sel <- mr_results_proc %>% filter(n_significant_pass == "TRUE")
+```
+```{r}
+# visualize in scatterplot of SNP effects
+my_plot <- mr_scatter_plot(mr_results, harmonised_data)
+
+pdf("scatterplot_ms_combined.pdf", width = 6, height = 4, useDingbats = F) # change name
+par(xpd = NA)
+  
+for (mr_plot in my_plot) {
+  str(mr_plot)
+  print(mr_plot)
+}  
+
+dev.off()
+
+```
