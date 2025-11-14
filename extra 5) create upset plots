@@ -1,0 +1,135 @@
+---
+title: "Upset plots"
+author: "Lotte"
+date: "2025-08-28"
+output: html_document
+---
+
+```{r}
+install.packages("UpSetR")
+library(UpSetR)
+
+```
+
+```{r}
+input_snps <- c(
+  "SLE&IBD" = 20,
+  "SLE&UC" = 3,
+  "SLE&CD" = 18,
+  "SLE&T1DM" = 7,
+  "SLE&RA" = 30,
+  "SLE&MS" = 5,
+  "SLE&CE" = 0,
+  "SLE&AS" = 0,
+  "SLE&ASTH" = 4,
+  "IBD&UC" = 3,
+  "IBD&CD" = 409,
+  "IBD&T1DM" = 123,
+  "IBD&RA" = 65,
+  "IBD&MS" = 33,
+  "IBD&CE" = 5,
+  "IBD&AS" = 21,
+  "IBD&ASTH" = 160,
+  "UC&CD" = 115,
+  "UC&T1DM" = 33,
+  "UC&RA" = 27,
+  "UC&MS" = 17,
+  "UC&CE" = 1,
+  "UC&AS" = 14,
+  "UC&ASTH" = 46,
+  "CD&T1DM" = 100,
+  "CD&RA" = 56,
+  "CD&MS" = 30,
+  "CD&CE" = 2,
+  "CD&AS" = 19,
+  "CD&ASTH" = 137,
+  "T1DM&RA" = 75,
+  "T1DM&MS" = 30,
+  "T1DM&CE" = 3,
+  "T1DM&AS" = 2,
+  "T1DM&ASTH" = 90,
+  "RA&MS" = 28,
+  "RA&CE" = 2,
+  "RA&AS" = 1,
+  "RA&ASTH" = 36,
+  "MS&CE" = 2,
+  "MS&AS" = 13,
+  "MS&ASTH" = 45,
+  "CE&AS" = 0,
+  "CE&ASTH" = 5,
+  "AS&ASTH" = 0
+  )
+
+upset(fromExpression(input_snps), 
+      nintersects = 40, 
+      nsets = 6, 
+      order.by = "freq", 
+      decreasing = T, 
+      mb.ratio = c(0.6, 0.4),
+      number.angles = 0, 
+      text.scale = 1.1, 
+      point.size = 2.8, 
+      line.size = 1
+      )
+```
+```{r}
+input_genes <- c(
+  "SLE&IBD" = 11,
+  "SLE&UC" = 0,
+  "SLE&CD" = 4,
+  "SLE&T1DM" = 11,
+  "SLE&RA" = 1,
+  "SLE&MS" = 0,
+  "SLE&CE" = 0,
+  "SLE&AS" = 0,
+  "SLE&ASTH" = 2,
+  "IBD&UC" = 2,
+  "IBD&CD" = 43,
+  "IBD&T1DM" = 38,
+  "IBD&RA" = 24,
+  "IBD&MS" = 7,
+  "IBD&CE" = 0,
+  "IBD&AS" = 0,
+  "IBD&ASTH" = 41,
+  "UC&CD" = 1,
+  "UC&T1DM" = 0,
+  "UC&RA" = 1,
+  "UC&MS" = 1,
+  "UC&CE" = 0,
+  "UC&AS" = 0,
+  "UC&ASTH" = 1,
+  "CD&T1DM" = 18,
+  "CD&RA" = 10,
+  "CD&MS" = 5,
+  "CD&CE" = 0,
+  "CD&AS" = 0,
+  "CD&ASTH" = 17,
+  "T1DM&RA" = 29,
+  "T1DM&MS" = 11,
+  "T1DM&CE" = 0,
+  "T1DM&AS" = 0,
+  "T1DM&ASTH" = 30,
+  "RA&MS" = 0,
+  "RA&CE" = 0,
+  "RA&AS" = 0,
+  "RA&ASTH" = 2,
+  "MS&CE" = 0,
+  "MS&AS" = 0,
+  "MS&ASTH" = 2,
+  "CE&AS" = 0,
+  "CE&ASTH" = 0,
+  "AS&ASTH" = 0
+)
+
+upset(fromExpression(input_genes), 
+      nintersects = 40, 
+      nsets = 6, 
+      order.by = "freq", 
+      decreasing = T, 
+      mb.ratio = c(0.6, 0.4),
+      number.angles = 0, 
+      text.scale = 1.1, 
+      point.size = 2.8, 
+      line.size = 1
+      )
+```
