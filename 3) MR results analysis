@@ -1,0 +1,203 @@
+
+---
+title: "MR results analysis"
+author: "Lotte"
+date: "2025-09-04"
+output: html_document
+---
+
+```{r}
+#install.packages("dplyr")
+```
+```{r}
+library(dplyr)
+```
+# SLE
+```{r}
+file_mr_results_sle <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_sle.txt"
+mr_results_sle <- fread(file_mr_results_sle)
+mr_results_sle_proc <- mr_results_sle %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_sle_sel <- mr_results_sle_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_sle <- unique(mr_results_sle_sel$exposure) 
+# remove non causal genes 
+mr_genes_sle <- mr_genes_sle[mr_genes_sle != "DHX58" & mr_genes_sle != "IFI16"] 
+
+merge_eqtl_gwas_sle <- merge(eqtl_sle, sumstats_sle, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_sle <- merge_eqtl_gwas_sle[merge_eqtl_gwas_sle$gene_name %in% mr_genes_sle & merge_eqtl_gwas_sle$type == "trans"]
+df_sle <- df_sle %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_sle$beta <- df_sle$beta_gwas * df_sle$beta_eqtl
+df_sle <- df_sle %>% mutate(direction = ifelse(beta >0, 1, -1))
+#df_sle <- df_sle %>% select(-beta)
+write.table(df_sle, "df_sle_networks.tsv",quote=FALSE,row.names=F)
+```
+# IBD
+```{r}
+file_mr_results_ibd <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_ibd.txt"
+mr_results_ibd <- fread(file_mr_results_ibd)
+mr_results_ibd_proc <- mr_results_ibd %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_ibd_sel <- mr_results_ibd_proc %>% filter(n_significant_pass == "TRUE") # check coefficient discrepancies
+mr_genes_ibd <- unique(mr_results_ibd_sel$exposure) 
+# remove non causal genes 
+mr_genes_ibd <- mr_genes_ibd[mr_genes_ibd !="CD99" & mr_genes_ibd !="MOV10" & mr_genes_ibd !="FCGR1B"] 
+
+merge_eqtl_gwas_ibd <- merge(eqtl_ibd, sumstats_ibd, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_ibd <- merge_eqtl_gwas_ibd[merge_eqtl_gwas_ibd$gene_name %in% mr_genes_ibd & merge_eqtl_gwas_ibd$type == "trans"]
+df_ibd <- df_ibd %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_ibd$beta <- df_ibd$beta_gwas * df_ibd$beta_eqtl
+df_ibd <- df_ibd %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_ibd, "df_ibd_networks.tsv",quote=FALSE,row.names=F)
+```
+# UC
+```{r}
+file_mr_results_uc <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_uc.txt"
+mr_results_uc <- fread(file_mr_results_uc)
+mr_results_uc_proc <- mr_results_uc %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_uc_sel <- mr_results_uc_proc %>% filter(n_significant_pass == "TRUE")
+```
+# CD
+```{r}
+file_mr_results_cd <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_cd.txt"
+mr_results_cd <- fread(file_mr_results_cd)
+mr_results_cd_proc <- mr_results_cd %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_cd_sel <- mr_results_cd_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_cd <- unique(mr_results_cd_sel$exposure) 
+# remove non causal genes 
+mr_genes_cd <- mr_genes_cd[mr_genes_cd != "CD99" & mr_genes_cd != "HNRNPA1P21"] 
+
+merge_eqtl_gwas_cd <- merge(eqtl_cd, sumstats_cd, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_cd <- merge_eqtl_gwas_cd[merge_eqtl_gwas_cd$gene_name %in% mr_genes_cd & merge_eqtl_gwas_cd$type == "trans"]
+df_cd <- df_cd %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_cd$beta <- df_cd$beta_gwas * df_cd$beta_eqtl
+df_cd <- df_cd %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_cd, "df_cd_networks.tsv",quote=FALSE,row.names=F)
+```
+# T1DM
+```{r}
+file_mr_results_t1dm <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_t1dm.txt"
+mr_results_t1dm <- fread(file_mr_results_t1dm)
+mr_results_t1dm_proc <- mr_results_t1dm %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_t1dm_sel <- mr_results_t1dm_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_t1dm <- unique(mr_results_t1dm_sel$exposure) 
+# remove non causal genes 
+mr_genes_t1dm <- mr_genes_t1dm[mr_genes_t1dm != "FBLN7"] 
+
+merge_eqtl_gwas_t1dm <- merge(eqtl_t1dm, sumstats_t1dm, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_t1dm <- merge_eqtl_gwas_t1dm[merge_eqtl_gwas_t1dm$gene_name %in% mr_genes_t1dm & merge_eqtl_gwas_t1dm$type == "trans"]
+df_t1dm <- df_t1dm %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_t1dm$beta <- df_t1dm$beta_gwas * df_t1dm$beta_eqtl
+df_t1dm <- df_t1dm %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_t1dm, "df_t1dm_networks.tsv",quote=FALSE,row.names=F)
+```
+# CE 
+```{r}
+file_mr_results_ce <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_ce.txt"
+mr_results_ce <- fread(file_mr_results_ce)
+mr_results_ce_proc <- mr_results_ce %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_ce_sel <- mr_results_ce_proc %>% filter(n_significant_pass == "TRUE")
+```
+# MS
+```{r}
+file_mr_results_ms <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_ms.txt"
+mr_results_ms <- fread(file_mr_results_ms)
+mr_results_ms_proc <- mr_results_ms %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_ms_sel <- mr_results_ms_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_ms <- unique(mr_results_ms_sel$exposure) 
+# remove non causal genes 
+
+merge_eqtl_gwas_ms <- merge(eqtl_ms, sumstats_ms, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_ms <- merge_eqtl_gwas_ms[merge_eqtl_gwas_ms$gene_name %in% mr_genes_ms & merge_eqtl_gwas_ms$type == "trans"]
+df_ms <- df_ms %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_ms$beta <- df_ms$beta_gwas * df_ms$beta_eqtl
+df_ms <- df_ms %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_ms, "df_ms_networks.tsv",quote=FALSE,row.names=F)
+```
+# RA
+```{r}
+file_mr_results_ra <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_ra.txt"
+mr_results_ra <- fread(file_mr_results_ra)
+mr_results_ra_proc <- mr_results_ra %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_ra_sel <- mr_results_ra_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_ra <- unique(mr_results_ra_sel$exposure) 
+# remove non causal genes 
+
+merge_eqtl_gwas_ra <- merge(eqtl_ra, sumstats_ra, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_ra <- merge_eqtl_gwas_ra[merge_eqtl_gwas_ra$gene_name %in% mr_genes_ra & merge_eqtl_gwas_ra$type == "trans"]
+df_ra <- df_ra %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_ra$beta <- df_ra$beta_gwas * df_ra$beta_eqtl
+df_ra <- df_ra %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_ra, "df_ra_networks.tsv",quote=FALSE,row.names=F)
+```
+# AS
+```{r}
+file_mr_results_as <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_as.txt"
+mr_results_as <- fread(file_mr_results_as)
+mr_results_as_proc <- mr_results_as %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_as_sel <- mr_results_as_proc %>% filter(n_significant_pass == "TRUE")
+```
+# ASTH
+```{r}
+file_mr_results_asth <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/mr_results_asth.txt"
+mr_results_asth <- fread(file_mr_results_asth)
+mr_results_asth_proc <- mr_results_asth %>%
+  group_by(id.exposure, id.outcome) %>%
+  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
+  mutate(n_significant = sum(pval<0.05),
+         n_significant_pass = n_significant > 1)
+
+mr_results_asth_sel <- mr_results_asth_proc %>% filter(n_significant_pass == "TRUE")
+mr_genes_asth <- unique(mr_results_asth_sel$exposure) 
+# remove non causal genes 
+mr_genes_asth <- mr_genes_asth[mr_genes_asth !=] 
+
+merge_eqtl_gwas_asth <- merge(eqtl_asth, sumstats_asth, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+df_asth <- merge_eqtl_gwas_asth[merge_eqtl_gwas_asth$gene_name %in% mr_genes_asth & merge_eqtl_gwas_asth$type == "trans"]
+df_asth <- df_asth %>% select(beta_gwas, beta_eqtl, variant, gene_name)
+df_asth$beta <- df_asth$beta_gwas * df_asth$beta_eqtl
+df_asth <- df_asth %>% mutate(direction = ifelse(beta >0, 1, -1))
+write.table(df_asth, "df_asth_networks.tsv",quote=FALSE,row.names=F)
+```
