@@ -1,0 +1,804 @@
+---
+title: "script for unique SNPs, overlap in genes and SNPs per disease"
+author: "Lotte"
+date: "2025-08-29"
+output: html_document
+---
+
+```{r}
+# install packages
+#install.packages("data.table")
+#install.packages("ggplot2")
+#install.packages("ggrepel")
+#install.packages("arrow")
+#install.packages("tidyverse")
+#install.packages("readxl")
+#install.packages("igraph")
+
+```
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+library(readxl)
+library(arrow)
+#library(tidyverse)
+library(igraph)
+```
+```{r}
+file_eqtl_SLE <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_SLE.txt"
+file_freq_SLE <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_SLE.txt"
+file_sumstats_sign_SLE <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_SLE.txt"
+
+file_eqtl_IBD <-"/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_IBD.txt"
+file_freq_IBD <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_IBD.txt"
+file_sumstats_sign_IBD <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_IBD.txt"
+
+file_eqtl_UC <-"/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_UC.txt"
+file_freq_UC <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_UC.txt"
+file_sumstats_sign_UC <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_UC.txt"
+
+file_eqtl_CD <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_CD.txt"
+file_freq_CD <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_CD.txt"
+file_sumstats_sign_CD <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_CD.txt"
+
+file_eqtl_T1DM <-"/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_T1DM.txt"
+file_freq_T1DM <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_T1DM.txt"  
+file_sumstats_sign_T1DM <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_T1DM.txt"
+
+file_eqtl_RA <-"/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_RA.txt"
+file_freq_RA <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_RA.txt"
+file_sumstats_sign_RA <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_RA.txt"
+
+file_eqtl_MS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_MS.txt"
+file_freq_MS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_MS.txt"
+file_sumstats_sign_MS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_MS.txt"
+
+file_eqtl_CE <-"/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_CE.txt"
+file_freq_CE <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_CE.txt"
+file_sumstats_sign_CE <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_CE.txt"
+
+file_eqtl_AS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_AS.txt"
+file_freq_AS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_AS.txt"
+file_sumstats_sign_AS <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_AS.txt"
+
+file_eqtl_ASTH <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/eqtl_sign_ASTH.txt"
+file_freq_ASTH <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/total_frequency_table_ASTH.txt"
+file_sumstats_sign_ASTH <- "/Users/papeccet/Documents/projects/linking_de_genes_to_gwas/output/eQTL_immune/sumstats_sign_ASTH.txt"
+
+eqtl_sle <- fread(file_eqtl_SLE)
+freq_sle <- fread(file_freq_SLE)
+sumstats_sle <- fread(file_sumstats_sign_SLE)
+eqtl_ibd <- fread(file_eqtl_IBD)
+freq_ibd <- fread(file_freq_IBD)
+sumstats_ibd <- fread(file_sumstats_sign_IBD)
+eqtl_uc <- fread(file_eqtl_UC)
+freq_uc <- fread(file_freq_UC)
+sumstats_uc <- fread(file_sumstats_sign_UC)
+eqtl_cd <- fread(file_eqtl_CD)
+freq_cd <- fread(file_freq_CD)
+sumstats_cd <- fread(file_sumstats_sign_CD)
+eqtl_t1dm <- fread(file_eqtl_T1DM)
+freq_t1dm <- fread(file_freq_T1DM)
+sumstats_t1dm <- fread(file_sumstats_sign_T1DM)
+eqtl_ra <- fread(file_eqtl_RA)
+freq_ra <- fread(file_freq_RA)
+sumstats_ra <- fread(file_sumstats_sign_RA)
+eqtl_ms <- fread(file_eqtl_MS)
+freq_ms <- fread(file_freq_MS)
+sumstats_ms <- fread(file_sumstats_sign_MS)
+eqtl_ce <- fread(file_eqtl_CE)
+freq_ce <- fread(file_freq_CE)
+sumstats_ce <- fread(file_sumstats_sign_CE)
+eqtl_as <- fread(file_eqtl_AS)
+freq_as <- fread(file_freq_AS)
+sumstats_as <- fread(file_sumstats_sign_AS)
+eqtl_asth <- fread(file_eqtl_ASTH)
+freq_asth <- fread(file_freq_ASTH)
+sumstats_asth <- fread(file_sumstats_sign_ASTH)
+```
+```{r}
+table(freq_sle$n_trans_eqtls)
+```
+```{r}
+table(freq_ibd$n_trans_eqtls)
+```
+```{r}
+table(freq_uc$n_trans_eqtls)
+```
+```{r}
+table(freq_cd$n_trans_eqtls)
+```
+```{r}
+table(freq_t1dm$n_trans_eqtls)
+```
+```{r}
+table(freq_ra$n_trans_eqtls)
+```
+```{r}
+table(freq_ms$n_trans_eqtls)
+```
+```{r}
+table(freq_ce$n_trans_eqtls)
+```
+```{r}
+table(freq_as$n_trans_eqtls)
+```
+```{r}
+table(freq_asth$n_trans_eqtls)
+```
+```{r}
+table(freq_sle$n_cis_eqtls)
+```
+```{r}
+table(freq_ibd$n_cis_eqtls)
+```
+```{r}
+table(freq_uc$n_cis_eqtls)
+```
+```{r}
+table(freq_cd$n_cis_eqtls)
+```
+```{r}
+table(freq_t1dm$n_cis_eqtls)
+```
+```{r}
+table(freq_ra$n_cis_eqtls)
+```
+```{r}
+table(freq_ms$n_cis_eqtls)
+```
+```{r}
+table(freq_ce$n_cis_eqtls)
+```
+```{r}
+table(freq_as$n_cis_eqtls)
+```
+```{r}
+table(freq_asth$n_cis_eqtls)
+```
+# SNPs: number; unique rsid 
+```{r}
+# SLE 
+snps_sle <- unique(eqtl_sle$variant)
+length(snps_sle)
+```
+```{r}
+snps_ibd <- unique(eqtl_ibd$variant)
+length(snps_ibd)
+```
+```{r}
+snps_uc <- unique(eqtl_uc$variant)
+length(snps_uc)
+```
+
+```{r}
+# cd
+snps_cd <- unique(eqtl_cd$variant)
+length(snps_cd)
+```
+```{r}
+# t1dm
+snps_t1dm <- unique(eqtl_t1dm$variant)
+length(snps_t1dm)
+```
+```{r}
+# ra
+snps_ra <- unique(eqtl_ra$variant)
+length(snps_ra)
+```
+
+```{r}
+# ms
+snps_ms <- unique(eqtl_ms$variant)
+length(snps_ms)
+```
+
+```{r}
+snps_ce <- unique(eqtl_ce$variant)
+length(snps_ce)
+```
+```{r}
+# as
+snps_as <- unique(eqtl_as$variant)
+length(snps_as)
+```
+
+```{r}
+snps_asth <- unique(eqtl_asth$variant)
+length(snps_asth)
+```
+# SLE
+```{r}
+overlap_snps_sle_ibd <- intersect(snps_sle, snps_ibd)
+length(overlap_snps_sle_ibd)
+print(overlap_snps_sle_ibd)
+```
+```{r}
+overlap_snps_sle_uc <- intersect(snps_sle, snps_uc)
+length(overlap_snps_sle_uc)
+print(overlap_snps_sle_uc)
+```
+```{r}
+overlap_snps_sle_cd <- intersect(snps_sle, snps_cd)
+length(overlap_snps_sle_cd)
+print(overlap_snps_sle_cd)
+```
+```{r}
+overlap_snps_sle_t1dm <- intersect(snps_sle, snps_t1dm)
+length(overlap_snps_sle_t1dm)
+print(overlap_snps_sle_t1dm)
+```
+
+```{r}
+overlap_snps_sle_ra <- intersect(snps_sle, snps_ra)
+length(overlap_snps_sle_ra)
+print(overlap_snps_sle_ra)
+```
+
+```{r}
+overlap_snps_sle_ms <- intersect(snps_sle, snps_ms)
+length(overlap_snps_sle_ms)
+print(overlap_snps_sle_ms)
+```
+```{r}
+overlap_snps_sle_ce <- intersect(snps_sle, snps_ce)
+length(overlap_snps_sle_ce)
+print(overlap_snps_sle_ce)
+```
+```{r}
+overlap_snps_sle_as <- intersect(snps_sle, snps_as)
+length(overlap_snps_sle_as)
+print(overlap_snps_sle_as)
+```
+```{r}
+overlap_snps_sle_asth <- intersect(snps_sle, snps_asth)
+length(overlap_snps_sle_asth)
+print(overlap_snps_sle_asth)
+```
+
+# IBD 
+```{r}
+overlap_snps_ibd_uc <- intersect(snps_ibd, snps_uc)
+length(overlap_snps_sle_uc)
+print(overlap_snps_sle_uc)
+```
+```{r}
+overlap_snps_ibd_cd <- intersect(snps_ibd, snps_cd)
+length(overlap_snps_ibd_cd)
+print(overlap_snps_ibd_cd)
+```
+```{r}
+overlap_snps_ibd_t1dm <- intersect(snps_ibd, snps_t1dm)
+length(overlap_snps_ibd_t1dm)
+print(overlap_snps_ibd_t1dm)
+```
+
+```{r}
+overlap_snps_ibd_ra <- intersect(snps_ibd, snps_ra)
+length(overlap_snps_ibd_ra)
+print(overlap_snps_ibd_ra)
+```
+
+```{r}
+overlap_snps_ibd_ms <- intersect(snps_ibd, snps_ms)
+length(overlap_snps_ibd_ms)
+print(overlap_snps_ibd_ms)
+```
+```{r}
+overlap_snps_ibd_ce <- intersect(snps_ibd, snps_ce)
+length(overlap_snps_ibd_ce)
+print(overlap_snps_ibd_ce)
+```
+```{r}
+overlap_snps_ibd_as <- intersect(snps_ibd, snps_as)
+length(overlap_snps_ibd_as)
+print(overlap_snps_ibd_as)
+```
+```{r}
+overlap_snps_ibd_asth <- intersect(snps_ibd, snps_asth)
+length(overlap_snps_ibd_asth)
+print(overlap_snps_ibd_asth)
+```
+# UC 
+```{r}
+overlap_snps_uc_cd <- intersect(snps_uc, snps_cd)
+length(overlap_snps_uc_cd)
+print(overlap_snps_uc_cd)
+```
+```{r}
+overlap_snps_uc_t1dm <- intersect(snps_uc, snps_t1dm)
+length(overlap_snps_uc_t1dm)
+print(overlap_snps_uc_t1dm)
+```
+
+```{r}
+overlap_snps_uc_ra <- intersect(snps_uc, snps_ra)
+length(overlap_snps_uc_ra)
+print(overlap_snps_uc_ra)
+```
+
+```{r}
+overlap_snps_uc_ms <- intersect(snps_uc, snps_ms)
+length(overlap_snps_uc_ms)
+print(overlap_snps_uc_ms)
+```
+```{r}
+overlap_snps_uc_ce <- intersect(snps_uc, snps_ce)
+length(overlap_snps_uc_ce)
+print(overlap_snps_uc_ce)
+```
+
+```{r}
+overlap_snps_uc_as <- intersect(snps_uc, snps_as)
+length(overlap_snps_uc_as)
+print(overlap_snps_uc_as)
+```
+```{r}
+overlap_snps_uc_asth <- intersect(snps_uc, snps_asth)
+length(overlap_snps_uc_asth)
+print(overlap_snps_uc_asth)
+```
+# CD 
+```{r}
+overlap_snps_cd_t1dm <- intersect(snps_cd, snps_t1dm)
+length(overlap_snps_cd_t1dm)
+print(overlap_snps_cd_t1dm)
+```
+
+```{r}
+overlap_snps_cd_ra <- intersect(snps_cd, snps_ra)
+length(overlap_snps_cd_ra)
+print(overlap_snps_cd_ra)
+```
+
+```{r}
+overlap_snps_cd_ms <- intersect(snps_cd, snps_ms)
+length(overlap_snps_cd_ms)
+print(overlap_snps_cd_ms)
+```
+```{r}
+overlap_snps_cd_ce <- intersect(snps_cd, snps_ce)
+length(overlap_snps_cd_ce)
+print(overlap_snps_cd_ce)
+```
+
+```{r}
+overlap_snps_cd_as <- intersect(snps_cd, snps_as)
+length(overlap_snps_cd_as)
+print(overlap_snps_cd_as)
+```
+
+```{r}
+overlap_snps_cd_asth <- intersect(snps_cd, snps_asth)
+length(overlap_snps_cd_asth)
+print(overlap_snps_cd_asth)
+```
+#T1DM
+```{r}
+overlap_snps_t1dm_ra <- intersect(snps_t1dm, snps_ra)
+length(overlap_snps_t1dm_ra)
+print(overlap_snps_t1dm_ra)
+```
+```{r}
+overlap_snps_t1dm_ms <- intersect(snps_t1dm, snps_ms)
+length(overlap_snps_t1dm_ms)
+print(overlap_snps_t1dm_ms)
+```
+```{r}
+overlap_snps_t1dm_ce <- intersect(snps_t1dm, snps_ce)
+length(overlap_snps_t1dm_ce)
+print(overlap_snps_t1dm_ce)
+```
+
+```{r}
+overlap_snps_t1dm_as <- intersect(snps_t1dm, snps_as)
+length(overlap_snps_t1dm_as)
+print(overlap_snps_t1dm_as)
+```
+```{r}
+overlap_snps_t1dm_asth <- intersect(snps_t1dm, snps_asth)
+length(overlap_snps_t1dm_asth)
+print(overlap_snps_t1dm_asth)
+```
+
+# RA 
+```{r}
+overlap_snps_ra_ms <- intersect(snps_ra, snps_ms)
+length(overlap_snps_ra_ms)
+print(overlap_snps_ra_ms)
+```
+```{r}
+overlap_snps_ra_ce <- intersect(snps_ra, snps_ce)
+length(overlap_snps_ra_ce)
+print(overlap_snps_ra_ce)
+```
+
+```{r}
+overlap_snps_ra_as <- intersect(snps_ra, snps_as)
+length(overlap_snps_ra_as)
+print(overlap_snps_ra_as)
+```
+```{r}
+overlap_snps_ra_asth <- intersect(snps_ra, snps_asth)
+length(overlap_snps_ra_asth)
+print(overlap_snps_ra_asth)
+```
+
+# MS 
+```{r}
+overlap_snps_ms_ce <- intersect(snps_ms, snps_ce)
+length(overlap_snps_ms_ce)
+print(overlap_snps_ms_ce)
+```
+
+```{r}
+overlap_snps_ms_as <- intersect(snps_ms, snps_as)
+length(overlap_snps_ms_as)
+print(overlap_snps_ms_as)
+```
+```{r}
+overlap_snps_ms_asth <- intersect(snps_ms, snps_asth)
+length(overlap_snps_ms_asth)
+print(overlap_snps_ms_asth)
+```
+#CE 
+```{r}
+overlap_snps_ce_as <- intersect(snps_ce, snps_as)
+length(overlap_snps_ce_as)
+print(overlap_snps_ce_as)
+```
+```{r}
+overlap_snps_ce_asth <- intersect(snps_ce, snps_asth)
+length(overlap_snps_ce_asth)
+print(overlap_snps_ce_asth)
+```
+#AS 
+```{r}
+overlap_snps_as_asth <- intersect(snps_as, snps_asth)
+length(overlap_snps_as_asth)
+print(overlap_snps_as_asth)
+```
+
+# overlap genes of trans eQTLs
+```{r}
+# SLE 
+overlap_genes_sle_ibd <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1])
+length(overlap_genes_sle_ibd)
+print(overlap_genes_sle_ibd) 
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_ibd]
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_sle_uc <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_uc$phenotype[freq_uc$n_trans_eqtls >1])
+length(overlap_genes_sle_uc)
+print(overlap_genes_sle_uc) 
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_uc]
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_sle_cd <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_cd$phenotype[freq_cd$n_trans_eqtls >1])
+length(overlap_genes_sle_cd)
+print(overlap_genes_sle_cd) 
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_cd]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_sle_t1dm <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1])
+length(overlap_genes_sle_t1dm)
+print(overlap_genes_sle_t1dm) 
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_t1dm] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_sle_ra <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_ra$phenotype[freq_ra$n_trans_eqtls >1])
+length(overlap_genes_sle_ra)
+print(overlap_genes_sle_ra)    
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_ra]
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_sle_ms <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_ms$phenotype[freq_ms$n_trans_eqtls >1]) 
+length(overlap_genes_sle_ms)
+print(overlap_genes_sle_ms)  
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_ms]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_sle_ce <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_ce$phenotype[freq_ce$n_trans_eqtls >1])
+length(overlap_genes_sle_ce)
+print(overlap_genes_sle_ce) #  
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_ce]
+print(unique(overlap_genes))
+```
+
+```{r}
+# overlap of genes of trans eQTLs
+overlap_genes_sle_as <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_as$phenotype[freq_as$n_trans_eqtls >1])
+length(overlap_genes_sle_as)
+print(overlap_genes_sle_as)  
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_as]
+print(unique(overlap_genes))
+```
+```{r}
+# overlap of genes of trans eQTLs
+overlap_genes_sle_asth <- intersect(freq_sle$phenotype[freq_sle$n_trans_eqtls >1], freq_asth$phenotype[freq_asth$n_trans_eqtls >1])
+length(overlap_genes_sle_asth) 
+print(overlap_genes_sle_asth)   
+overlap_genes <- eqtl_sle$gene_name[eqtl_sle$phenotype %in% overlap_genes_sle_asth]
+print(unique(overlap_genes))
+```
+# overlap genes of trans eQTLS for IBD
+```{r}
+overlap_genes_ibd_uc <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_uc$phenotype[freq_uc$n_trans_eqtls >1])
+length(overlap_genes_ibd_uc)
+print(overlap_genes_ibd_uc) 
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_uc]
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_ibd_cd <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_cd$phenotype[freq_cd$n_trans_eqtls >1])
+length(overlap_genes_ibd_cd)
+print(overlap_genes_ibd_cd) 
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_cd]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ibd_t1dm <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1])
+length(overlap_genes_ibd_t1dm)
+print(overlap_genes_ibd_t1dm) 
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_t1dm] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ibd_ra <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_ra$phenotype[freq_ra$n_trans_eqtls >1])
+length(overlap_genes_ibd_ra) 
+print(overlap_genes_ibd_ra)   
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_ra]
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_ibd_ms <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_ms$phenotype[freq_ms$n_trans_eqtls >1])
+length(overlap_genes_ibd_ms)
+print(overlap_genes_ibd_ms)   
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_ms]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ibd_ce <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_ce$phenotype[freq_ce$n_trans_eqtls >1])
+length(overlap_genes_ibd_ce)
+print(overlap_genes_ibd_ce)  
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_ce]
+print(unique(overlap_genes)) 
+``` 
+
+```{r}
+overlap_genes_ibd_as <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_as$phenotype[freq_as$n_trans_eqtls >1])
+length(overlap_genes_ibd_as)
+print(overlap_genes_ibd_as)    
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_as]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ibd_asth <- intersect(freq_ibd$phenotype[freq_ibd$n_trans_eqtls >1], freq_asth$phenotype[freq_asth$n_trans_eqtls >1])
+length(overlap_genes_ibd_asth)
+print(overlap_genes_ibd_asth)  
+overlap_genes <- eqtl_ibd$gene_name[eqtl_ibd$phenotype %in% overlap_genes_ibd_asth]
+print(unique(overlap_genes))
+```
+# overlap genes of trans eQTLs UC
+```{r}
+overlap_genes_uc_cd <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_cd$phenotype[freq_cd$n_trans_eqtls >1])
+length(overlap_genes_uc_cd)
+print(overlap_genes_uc_cd) 
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_cd]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_uc_t1dm <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1])
+length(overlap_genes_uc_t1dm)
+print(overlap_genes_uc_t1dm) 
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_t1dm] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_uc_ra <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_ra$phenotype[freq_ra$n_trans_eqtls >1])
+length(overlap_genes_uc_ra)
+print(overlap_genes_uc_ra)   
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_ra] 
+print(unique(overlap_genes))
+```
+
+```{r}
+overlap_genes_uc_ms <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_ms$phenotype[freq_ms$n_trans_eqtls >1])
+length(overlap_genes_uc_ms)
+print(overlap_genes_uc_ms)  
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_ms] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_uc_ce <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_ce$phenotype[freq_ce$n_trans_eqtls >1])
+length(overlap_genes_uc_ce)
+print(overlap_genes_uc_ce)  
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_ce] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_uc_as <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_as$phenotype[freq_as$n_trans_eqtls >1])
+length(overlap_genes_uc_as)
+print(overlap_genes_uc_as)   
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_as]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_uc_asth <- intersect(freq_uc$phenotype[freq_uc$n_trans_eqtls >1], freq_asth$phenotype[freq_asth$n_trans_eqtls >1])
+length(overlap_genes_uc_asth)
+print(overlap_genes_uc_asth)  
+overlap_genes <- eqtl_uc$gene_name[eqtl_uc$phenotype %in% overlap_genes_uc_asth]
+print(unique(overlap_genes)) 
+```
+# overlap genes of trans eQTLs CD 
+```{r}
+overlap_genes_cd_t1dm <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1])
+length(overlap_genes_cd_t1dm)
+print(overlap_genes_cd_t1dm) 
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_t1dm]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_cd_ra <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_ra$phenotype[freq_ra$n_trans_eqtls >1])
+length(overlap_genes_cd_ra)
+print(overlap_genes_cd_ra)   
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_ra] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_cd_ms <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_ms$phenotype[freq_ms$n_trans_eqtls >1])
+length(overlap_genes_cd_ms) 
+print(overlap_genes_cd_ms)  
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_ms]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_cd_ce <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_ce$phenotype[freq_ce$n_trans_eqtls >1])
+length(overlap_genes_cd_ce)
+print(overlap_genes_cd_ce) 
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_ce] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_cd_as <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_as$phenotype[freq_as$n_trans_eqtls >1])
+length(overlap_genes_cd_as)
+print(overlap_genes_cd_as)  
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_as] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_cd_asth <- intersect(freq_cd$phenotype[freq_cd$n_trans_eqtls >1], freq_asth$phenotype[freq_asth$n_trans_eqtls >1])
+length(overlap_genes_cd_asth)
+print(overlap_genes_cd_asth)   
+overlap_genes <- eqtl_cd$gene_name[eqtl_cd$phenotype %in% overlap_genes_cd_asth] 
+print(unique(overlap_genes))
+```
+
+# overlap genes of trans eQTLs t1dm
+```{r}
+overlap_genes_t1dm_ra <- intersect(freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1], freq_ra$phenotype[freq_ra$n_trans_eqtls >1])
+length(overlap_genes_t1dm_ra)
+print(overlap_genes_t1dm_ra) 
+overlap_genes <- eqtl_t1dm$gene_name[eqtl_t1dm$phenotype %in% overlap_genes_t1dm_ra]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_t1dm_ms <- intersect(freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1], freq_ms$phenotype[freq_ms$n_trans_eqtls >1])
+length(overlap_genes_t1dm_ms)
+print(overlap_genes_t1dm_ms) 
+overlap_genes <- eqtl_t1dm$gene_name[eqtl_t1dm$phenotype %in% overlap_genes_t1dm_ms]
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_t1dm_ce <- intersect(freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1], freq_ce$phenotype[freq_ce$n_trans_eqtls >1])
+length(overlap_genes_t1dm_ce)
+print(overlap_genes_t1dm_ce) 
+overlap_genes <- eqtl_t1dm$gene_name[eqtl_t1dm$phenotype %in% overlap_genes_t1dm_ce] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_t1dm_as <- intersect(freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1], freq_as$phenotype[freq_as$n_trans_eqtls >1])
+length(overlap_genes_t1dm_as)
+print(overlap_genes_t1dm_as)  
+overlap_genes <- eqtl_t1dm$gene_name[eqtl_t1dm$phenotype %in% overlap_genes_t1dm_as] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_t1dm_asth <- intersect(freq_t1dm$phenotype[freq_t1dm$n_trans_eqtls >1], freq_asth$phenotype[freq_asth$n_trans_eqtls >1])
+length(overlap_genes_t1dm_asth)
+print(overlap_genes_t1dm_asth) 
+overlap_genes <- eqtl_t1dm$gene_name[eqtl_t1dm$phenotype %in% overlap_genes_t1dm_asth]
+print(unique(overlap_genes))
+```
+
+
+# overlap genes of trans eQTLs for RA
+```{r}
+overlap_genes_ra_ms <- intersect(freq_ra$phenotype[freq_ra$n_trans_eqtls >2], freq_ms$phenotype[freq_ms$n_trans_eqtls >2])
+length(overlap_genes_ra_ms)
+print(overlap_genes_ra_ms)   
+overlap_genes <- eqtl_ra$gene_name[eqtl_ra$phenotype %in% overlap_genes_ra_ms]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_ra_ce <- intersect(freq_ra$phenotype[freq_ra$n_trans_eqtls >2], freq_ce$phenotype[freq_ce$n_trans_eqtls >2])
+length(overlap_genes_ra_ce)
+print(overlap_genes_ra_ce)  
+overlap_genes <- eqtl_ra$gene_name[eqtl_ra$phenotype %in% overlap_genes_ra_ce]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_ra_as <- intersect(freq_ra$phenotype[freq_ra$n_trans_eqtls >2], freq_as$phenotype[freq_as$n_trans_eqtls >2])
+length(overlap_genes_ra_as)
+print(overlap_genes_ra_as)  
+overlap_genes <- eqtl_ra$gene_name[eqtl_ra$phenotype %in% overlap_genes_ra_as]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_ra_asth <- intersect(freq_ra$phenotype[freq_ra$n_trans_eqtls >2], freq_asth$phenotype[freq_asth$n_trans_eqtls >2])
+length(overlap_genes_ra_asth)
+print(overlap_genes_ra_asth) 
+overlap_genes <- eqtl_ra$gene_name[eqtl_ra$phenotype %in% overlap_genes_ra_asth]
+print(unique(overlap_genes)) 
+```
+
+# overlap of genes of trans eQTLs for MS
+```{r}
+overlap_genes_ms_ce <- intersect(freq_ms$phenotype[freq_ms$n_trans_eqtls >2], freq_ce$phenotype[freq_ce$n_trans_eqtls >2])
+length(overlap_genes_ms_ce)
+print(overlap_genes_ms_ce)  
+overlap_genes <- eqtl_ms$gene_name[eqtl_ms$phenotype %in% overlap_genes_ms_ce]
+print(unique(overlap_genes)) 
+```
+```{r}
+overlap_genes_ms_as <- intersect(freq_ms$phenotype[freq_ms$n_trans_eqtls >2], freq_as$phenotype[freq_as$n_trans_eqtls >2])
+length(overlap_genes_ms_as)
+print(overlap_genes_ms_as) 
+overlap_genes <- eqtl_ms$gene_name[eqtl_ms$phenotype %in% overlap_genes_ms_as] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ms_asth <- intersect(freq_ms$phenotype[freq_ms$n_trans_eqtls >2], freq_asth$phenotype[freq_asth$n_trans_eqtls >2])
+length(overlap_genes_ms_asth)
+print(overlap_genes_ms_asth)   
+overlap_genes <- eqtl_ms$gene_name[eqtl_ms$phenotype %in% overlap_genes_ms_asth] 
+print(unique(overlap_genes))
+```
+# CE 
+```{r}
+overlap_genes_ce_as <- intersect(freq_ce$phenotype[freq_ce$n_trans_eqtls >2], freq_as$phenotype[freq_as$n_trans_eqtls >2])
+length(overlap_genes_ce_as)
+print(overlap_genes_ce_as) 
+overlap_genes <- eqtl_ce$gene_name[eqtl_ce$phenotype %in% overlap_genes_ce_as] 
+print(unique(overlap_genes))
+```
+```{r}
+overlap_genes_ce_asth <- intersect(freq_ce$phenotype[freq_ce$n_trans_eqtls >2], freq_asth$phenotype[freq_asth$n_trans_eqtls >2])
+length(overlap_genes_ce_asth)
+print(overlap_genes_ce_asth)   
+overlap_genes <- eqtl_ce$gene_name[eqtl_ce$phenotype %in% overlap_genes_ce_asth] 
+print(unique(overlap_genes))
+```
+# overlap of genes of trans eQTLs for AS
+```{r}
+overlap_genes_as_asth <- intersect(freq_as$phenotype[freq_as$n_trans_eqtls >2], freq_asth$phenotype[freq_asth$n_trans_eqtls >2]) 
+length(overlap_genes_as_asth)
+print(overlap_genes_as_asth) 
+overlap_genes <- eqtl_as$gene_name[eqtl_as$phenotype %in% overlap_genes_as_asth]
+print(unique(overlap_genes))
+```
+
+```
