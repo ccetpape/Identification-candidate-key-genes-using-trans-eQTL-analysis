@@ -1,0 +1,155 @@
+---
+title: "20250828_eqtls_immune_disease"
+author: "Lotte Pape"
+date: "2025-08-28"
+output: html_document
+params:
+  trait: "SLE3"
+---
+## script for linking disease relevant genes to GWAS SNPs for multiple immune mediated diseases (SLE3, IBD, UC, CD, T1DM, RA, MS, CE, ASTH, AS)  
+---
+
+```{r}
+# install packages
+#install.packages("data.table")
+#install.packages("ggplot2")
+#install.packages("ggrepel")
+#install.packages("arrow")
+#install.packages("tidyverse")
+```
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+library(readxl)
+library(arrow)
+library(tidyverse)
+```
+
+```{r}
+# Open dataset GWAS 
+ds <- open_dataset("/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/public_data/linking_disease_relevant_genes/harmonized/eqtlgen_parquet_dataset")
+```
+```{r}
+## eQTLgen files 
+file_eQTL <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/fine_mapping/output/genome_wide_finemapping_susie_20250314/finemapped/fix_20250509/independent_variants_filtered_lbf2_mlog10p5_annotated_20250827_filtered-maxR2_0.5-noHla-noCrossmapping.txt.gz"
+eqtl <- fread(file_eQTL)
+
+file_LD_partners <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/fine_mapping/output/ld_partners/ld_partners.txt.gz"
+ld_partners <- fread(file_LD_partners) 
+
+```
+
+```{r}
+# define ZtoP function
+ZtoP <- function (Z, largeZ = FALSE, log10P = TRUE) 
+{
+    if (!is.numeric(Z)) {
+        message("Some of the Z-scores are not numbers! Please check why!")
+        message("Converting the non-numeric vector to numeric vector.")
+        Z <- as.numeric(Z)
+    }
+    if (largeZ == TRUE) {
+        P <- log(2) + pnorm(abs(Z), lower.tail = FALSE, log.p = TRUE)
+        if (largeZ == TRUE & log10P == TRUE) {
+            P <- -(P * log10(exp(1)))
+        }
+    }
+    else {
+        P <- 2 * pnorm(abs(Z), lower.tail = FALSE)
+        if (min(P) == 0) {
+            P[P == 0] <- .Machine$double.xmin
+            message("Some Z-score indicates very significant effect and P-value is truncated on 2.22e-308. If relevant, consider using largeZ = TRUE argument and logarithmed P-values instead.")
+        }
+    }
+    return(P)
+}
+```
+
+```{r}
+# Load gwas summary stats for a specific trait
+summary_stats <- ds %>% filter(gwas_id == params$trait) %>% collect()
+
+```
+
+
+```{r}
+# erase SNPs in HLA region
+# check: count number of SNPs on chr 6
+count_6 <- sum(summary_stats$chromosome == "6", na.rm = TRUE)
+print(count_6) 
+
+# delete SNPs in HLA region (genomic coordinates chr6:28,510,120-33,480,577) in GWAS (reference:https://www.ncbi.nlm.nih.gov/grc/human/regions/MHC)
+summary_stats <- summary_stats[!(summary_stats$chromosome == 6 & summary_stats$bp >20000000 & summary_stats$bp <40000000)]
+
+count_6_b <- sum(summary_stats$chromosome == "6", na.rm = TRUE)
+print(count_6_b) 
+
+```
+
+```{r}
+#step 1: merge sumstats df and LD partner df based on variant
+merge_sumstats_ld_partner <- merge(summary_stats, ld_partners, by.x = "variant_index", by.y = "variant_index_tagging", suffix=c("_gwas", "_eqtl"))
+# step 2: sort variants, select highest r^2, remove duplicates
+merge_sumstats_ld_partner_unique_gwas_variants <- merge_sumstats_ld_partner %>% 
+  group_by(variant_index_eqtl) %>%
+  slice_max(r_tagging^2, with_ties = TRUE) %>%
+  slice_max(variant_index_eqtl == variant_index) %>%
+  group_by(variant_index) %>%
+  slice_max(r_tagging^2, with_ties = TRUE) %>%
+  slice_max(variant_index_eqtl == variant_index) 
+# step 3: select significant SNPs
+merge_sumstats_ld_partner_unique_gwas_variants <- merge_sumstats_ld_partner_unique_gwas_variants[merge_sumstats_ld_partner_unique_gwas_variants$p < 5e-8,]
+
+write.table(merge_sumstats_ld_partner_unique_gwas_variants, "sumstats_sign_SLE.txt", sep=";", col.names=T, row.names=F) # change name
+```
+
+```{r}
+# annotate significant SNPs in eQTLgen file
+eqtl$sign <- eqtl$variant_index %in% merge_sumstats_ld_partner_unique_gwas_variants$variant_index_eqtl
+table(eqtl$sign)  
+
+# select significant snps
+eqtl_sign <- eqtl[eqtl$sign == TRUE, ] 
+write.table(eqtl_sign, "eqtl_sign_SLE.txt", sep=";", col.names=T, row.names=F) # change name
+
+merge_sumstats_eqtl <- merge(eqtl_sign, merge_sumstats_ld_partner_unique_gwas_variants, by.x = "variant_index", by.y = "variant_index_eqtl", suffix=c("_eqtl", "_gwas"))
+write.table(merge_sumstats_eqtl, "sumstats_eqtls_SLE.txt", sep=";", col.names=T, row.names=F) # file to use for MR. change name 
+
+# select rows with 'trans' eQTL in colym 'type' 
+eqtl_sign_trans <- eqtl_sign[eqtl_sign$type == "trans"]  
+
+unique_count <- length(unique(eqtl_sign_trans$gene_name))
+print(unique_count)   
+
+# make annotation column if gene has >1 trans eQTL
+gene_counts_trans <- table(eqtl_sign_trans$phenotype)
+
+as.data.table(gene_counts_trans)
+frequency_table_trans <- as.data.table(gene_counts_trans)
+colnames(frequency_table_trans) <- c("phenotype", "n_trans_eqtls")
+frequency_table_trans
+```
+
+```{r}
+# select rows with 'cis' eQTL in column 'type' 
+eqtl_sign_cis <- eqtl_sign[eqtl_sign$type == "cis"] 
+
+unique_count <- length(unique(eqtl_sign_cis$gene_name))
+print(unique_count)   
+
+# make annotation column if gene has >1 cis eQTL
+gene_counts_cis <- table(eqtl_sign_cis$phenotype)
+
+as.data.table(gene_counts_cis)
+frequency_table_cis <- as.data.table(gene_counts_cis)
+colnames(frequency_table_cis) <- c("phenotype", "n_cis_eqtls")
+frequency_table_cis
+```
+```{r}
+# merge frequency table trans and cis 
+total_frequency_table <- merge(frequency_table_cis, frequency_table_trans, by = "phenotype", all=TRUE)
+
+write.table(total_frequency_table, "total_frequency_table_SLE.txt", sep=";", col.names=T, row.names=F) # change name
+```
