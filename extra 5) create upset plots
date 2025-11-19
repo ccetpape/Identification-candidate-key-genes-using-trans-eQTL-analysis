@@ -1,76 +1,7 @@
----
-title: "Upset plots"
-author: "Lotte"
-date: "2025-08-28"
-output: html_document
----
 
 ```{r}
 install.packages("UpSetR")
 library(UpSetR)
-
-```
-
-```{r}
-input_snps <- c(
-  "SLE&IBD" = 20,
-  "SLE&UC" = 3,
-  "SLE&CD" = 18,
-  "SLE&T1DM" = 7,
-  "SLE&RA" = 30,
-  "SLE&MS" = 5,
-  "SLE&CE" = 0,
-  "SLE&AS" = 0,
-  "SLE&ASTH" = 4,
-  "IBD&UC" = 3,
-  "IBD&CD" = 409,
-  "IBD&T1DM" = 123,
-  "IBD&RA" = 65,
-  "IBD&MS" = 33,
-  "IBD&CE" = 5,
-  "IBD&AS" = 21,
-  "IBD&ASTH" = 160,
-  "UC&CD" = 115,
-  "UC&T1DM" = 33,
-  "UC&RA" = 27,
-  "UC&MS" = 17,
-  "UC&CE" = 1,
-  "UC&AS" = 14,
-  "UC&ASTH" = 46,
-  "CD&T1DM" = 100,
-  "CD&RA" = 56,
-  "CD&MS" = 30,
-  "CD&CE" = 2,
-  "CD&AS" = 19,
-  "CD&ASTH" = 137,
-  "T1DM&RA" = 75,
-  "T1DM&MS" = 30,
-  "T1DM&CE" = 3,
-  "T1DM&AS" = 2,
-  "T1DM&ASTH" = 90,
-  "RA&MS" = 28,
-  "RA&CE" = 2,
-  "RA&AS" = 1,
-  "RA&ASTH" = 36,
-  "MS&CE" = 2,
-  "MS&AS" = 13,
-  "MS&ASTH" = 45,
-  "CE&AS" = 0,
-  "CE&ASTH" = 5,
-  "AS&ASTH" = 0
-  )
-
-upset(fromExpression(input_snps), 
-      nintersects = 40, 
-      nsets = 6, 
-      order.by = "freq", 
-      decreasing = T, 
-      mb.ratio = c(0.6, 0.4),
-      number.angles = 0, 
-      text.scale = 1.1, 
-      point.size = 2.8, 
-      line.size = 1
-      )
 ```
 ```{r}
 input_genes <- c(
