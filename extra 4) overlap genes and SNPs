@@ -1,9 +1,3 @@
----
-title: "script for unique SNPs, overlap in genes and SNPs per disease"
-author: "Lotte"
-date: "2025-08-29"
-output: html_document
----
 
 ```{r}
 # install packages
