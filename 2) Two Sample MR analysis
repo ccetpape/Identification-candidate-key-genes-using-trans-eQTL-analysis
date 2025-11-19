@@ -1,7 +1,4 @@
 ---
-title: "TwoSampleMR"
-output: html_document
-date: "2025-08-28"
 params:
   trait: "SLE3"
   
