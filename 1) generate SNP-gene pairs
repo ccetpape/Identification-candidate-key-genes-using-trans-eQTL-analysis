@@ -1,8 +1,4 @@
 ---
-title: "20250828_eqtls_immune_disease"
-author: "Lotte Pape"
-date: "2025-08-28"
-output: html_document
 params:
   trait: "SLE3"
 ---
