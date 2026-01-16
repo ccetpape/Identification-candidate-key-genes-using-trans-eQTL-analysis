@@ -41,7 +41,7 @@ genes_sel <- na.omit(genes_sel)
 # datasets
 
 # eQTLgen: exposure
-file_eQTL <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/fine_mapping/output/genome_wide_finemapping_susie_20250314/finemapped/fix_20250509/independent_variants_filtered_lbf2_mlog10p5_annotated_20250827_filtered-maxR2_0.5-noHla-noCrossmapping.txt.gz"
+file_eQTL <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/fine_mapping/output/genome_wide_finemapping_susie_20250314/finemapped/fix_20250509/cleaned_20250923/independent_eQTLs_stringently_clumped_r2_01_for_Rb_20251106.txt.gz"
 finemap_eqtl <- fread(file_eQTL)
 
 sum_eqtl <- finemap_eqtl[finemap_eqtl$phenotype %in% genes_sel]
