@@ -12,6 +12,7 @@ install.packages("arrow")
 install.packages("dbplyr")
 install.packages("remotes")
 install.packages("dplyr)")
+install.packages("mr.pivw")
 ```
 
 ```{r}
@@ -23,9 +24,14 @@ library(remotes)
 library(dplyr)
 library(ggplot2)
 library(gridExtra)
+library(mr.pivw)
 ```
 
+
 ```{r}
+############################################################
+#  INPUT DATA
+############################################################
 file_sumstats_eqtl <- "/groups/umcg-fg/tmp02/projects/eqtlgen-phase2/users/umcg-cpape/sumstats_eqtls_SLE.txt" # change names
 sumstats_eqtl <- fread(file_sumstats_eqtl)
 
@@ -47,7 +53,6 @@ finemap_eqtl <- fread(file_eQTL)
 sum_eqtl <- finemap_eqtl[finemap_eqtl$phenotype %in% genes_sel]
 exposure_data <- sum_eqtl
 ```
-
 ```{r}
 # GWAS: outcome
 
@@ -58,9 +63,50 @@ summary_stats <- ds %>% dplyr::filter(gwas_id == params$trait) %>% dplyr::collec
 
 # For every finemapped eQTL variant, select the variant from summary stats
 outcome_data <- summary_stats[summary_stats$variant %in% sum_eqtl$variant]
+
+# select genome wide significant snps
+outcome_data <- subset(outcome_data, p < 5e-8)
+```
+```{r}
+############################################################
+# 1. CALCULATE F-STATISTIC PER SNP
+############################################################
+
+sum_eqtl <- sum_eqtl %>%
+  mutate(
+    F_stat = (beta / standard_error)^2
+  )
+
+# show weak instruments
+sum_eqtl %>%
+  filter(F_stat < 10) %>%
+  arrange(F_stat)
+```
+```{r}
+############################################################
+# 2. SUMMARY INSTRUMENTSTRENTH PER GENE
+############################################################
+instrument_summary <- sum_eqtl %>%
+  group_by(gene_name) %>%
+  summarise(
+    phenotype = first(phenotype),
+    n_SNP = n(),
+    min_F = min(F_stat, na.rm = TRUE),
+    median_F = median(F_stat, na.rm = TRUE),
+    mean_F = mean(F_stat, na.rm = TRUE),
+    max_F = max(F_stat, na.rm = TRUE),
+    n_weak = sum(F_stat < 10, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+instrument_summary
 ```
 
-```{r} 
+```{r}
+############################################################
+# 3. HARMONISE
+############################################################
+
 # change column names 
 exposure_data <- exposure_data  %>%
   rename(SNP=variant, id.exposure=phenotype, exposure=gene_name, beta.exposure=beta, se.exposure=standard_error, effect_allele.exposure=eff_allele, other_allele.exposure=non_eff_allele)
@@ -71,34 +117,994 @@ outcome_data <- outcome_data %>%
 
 # datasets harmoniseren
 harmonised_data <- harmonise_data(exposure_data, outcome_data)
-write.table(harmonised_data, "harmonized_data_ms.txt", sep=";", col.names=T, row.names=F)
+ 
 ```
+
 ```{r}
-# MR analysis
+############################################################
+# 4. MR analysis
+############################################################
 mr_results <- mr(harmonised_data)
-write.table(mr_results, "mr_results_ms.txt", sep=";", col.names=T, row.names=F) # change name
+```
+
+```{r}
+############################################################
+# 5. PRIMARY MR: RANDOM-EFFECTS IVW
+############################################################
+
+# Voor elk gen uitvoeren
+
+primary_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+
+    # Geen SNPs over
+    if (nrow(d) == 0) {
+      return(NULL)
+    }
+
+    # Eén SNP → Wald ratio
+    if (nrow(d) == 1) {
+
+      res <- mr(
+        d,
+        method_list = "mr_wald_ratio"
+      )
+
+    # ≥2 SNPs → IVW random effects
+    } else {
+
+      res <- mr(
+        d,
+        method_list = "mr_ivw_mre"
+      )
+    }
+
+    res
+  }
+) %>%
+  bind_rows()
 ```
 ```{r}
-mr_results_proc <- mr_results %>%
-  group_by(id.exposure, id.outcome) %>%
-  filter(method %in% c("MR Egger", "Inverse variance weighted", "Weighted median")) %>%
-  mutate(n_significant = sum(pval<0.05),
-         n_significant_pass = n_significant > 1)
+############################################################
+# 6. BH-FDR
+############################################################
 
-mr_results_sel <- mr_results_proc %>% filter(n_significant_pass == "TRUE")
+primary_results <- primary_results %>%
+  mutate(
+    p_FDR = p.adjust(pval, method = "BH"),
+    FDR_significant = p_FDR < 0.05
+  )
 ```
 ```{r}
-# visualize in scatterplot of SNP effects
-my_plot <- mr_scatter_plot(mr_results, harmonised_data)
 
-pdf("scatterplot_ms_combined.pdf", width = 6, height = 4, useDingbats = F) # change name
-par(xpd = NA)
+############################################################
+# 7. ADD INSTRUMENT INFO
+############################################################
+
+primary_results <- primary_results %>%
+  left_join(
+    instrument_summary,
+    by = c("id.exposure" = "phenotype")
+  )
+```
+```{r}
+
+############################################################
+# 8. SELECT FDR-SIGNIFICANT GENES
+############################################################
+
+FDR_hits <- primary_results %>%
+  filter(FDR_significant == TRUE) %>%
+  arrange(p_FDR)
+
+FDR_hits
+```
+
+```{r}
+############################################################
+# 9. PENALIZED IVW (pIVW)
+############################################################
+
+pivw_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # Alleen SNPs die door harmonisatie zijn behouden
+    d <- d %>%
+      filter(mr_keep == TRUE)
+    
+    # Geen SNPs over
+    if (nrow(d) == 0) {
+      return(NULL)
+    }
+    
+    # Aantal unieke SNPs
+    n_snps <- n_distinct(d$SNP)
+    
+    # pIVW alleen bij minimaal 3 onafhankelijke SNPs
+    if (n_snps < 3) {
+      return(NULL)
+    }
+    
+    # Alleen complete SNP-informatie gebruiken
+    d <- d %>%
+      filter(
+        !is.na(beta.outcome),
+        !is.na(beta.exposure),
+        !is.na(se.outcome),
+        !is.na(se.exposure),
+        se.outcome > 0,
+        se.exposure > 0
+      )
+    
+    # Opnieuw aantal SNPs controleren
+    n_snps <- n_distinct(d$SNP)
+    
+    if (n_snps < 3) {
+      return(NULL)
+    }
+    
+    # Data voor pIVW
+    pivw_data <- d %>%
+      select(
+        beta.outcome,
+        beta.exposure,
+        se.outcome,
+        se.exposure
+      )
+    
+    # pIVW
+    fit <- mr.pivw(
+      data = pivw_data,
+      lambda = 1,
+      plei = TRUE
+    )
+    
+    # Resultaat
+    data.frame(
+      exposure = d$exposure[1],
+      id.exposure = d$id.exposure[1],
+      outcome = d$outcome[1],
+      id.outcome = d$id.outcome[1],
+      nsnp = n_snps,
+      b = fit$beta.hat,
+      se = fit$beta.se,
+      p = fit$`pval (Normal)`
+    )
+  }
+) %>%
+  bind_rows()
+```
+
+```{r}
+
+############################################################
+# 10. WEIGHTED MEDIAN
+############################################################
+
+weighted_median <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Weighted median alleen bij ≥3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr(
+        d,
+        method_list = "mr_weighted_median"
+      )
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+
+```{r}
+
+############################################################
+# 11. LEAVE-ONE-OUT
+############################################################
+loo_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Leave-one-out alleen bij ≥3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr_leaveoneout(
+        d,
+        method = mr_ivw_mre
+      )
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 12. HETEROGENEITY
+############################################################
+
+heterogeneity_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Heterogeniteit alleen berekenen bij ≥2 SNPs
+    if (n_distinct(d$SNP) >= 2) {
+      
+      mr_heterogeneity(
+        d,
+        method_list = "mr_ivw"
+      )
+      
+    } else {
+      
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 13. MR-EGGER INTERCEPT
+############################################################
+
+pleiotropy <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Egger vereist minimaal 3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr_pleiotropy_test(d)
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 14. PREPARE RESULTS
+############################################################
+pivw_final <- pivw_results %>%
+  select(
+    id.exposure,
+    b,
+    se,
+    p
+  ) %>%
+  rename(
+    beta_pIVW = b,
+    se_pIVW = se,
+    p_pIVW = p
+  )
+
+heterogeneity_final <- heterogeneity_results %>%
+  filter(method == "Inverse variance weighted") %>%
+  select(
+    id.exposure,
+    Q,
+    Q_df,
+    Q_pval
+  ) %>%
+  rename(
+    heterogeneity_Q = Q,
+    heterogeneity_Q_df = Q_df,
+    heterogeneity_p = Q_pval
+  )
+
+pleiotropy_final <- pleiotropy %>%
+  select(
+    id.exposure,
+    egger_intercept,
+    se,
+    pval
+  ) %>%
+  rename(
+    egger_intercept = egger_intercept,
+    egger_se = se,
+    egger_p = pval
+  )
+```
+```{r}
+
+############################################################
+# 15. COMBINE MAIN RESULTS
+############################################################
+
+final_results <- primary_results %>%
   
-for (mr_plot in my_plot) {
-  str(mr_plot)
-  print(mr_plot)
-}  
+  select(
+    id.exposure,
+    exposure,
+    nsnp,
+    b,
+    se,
+    pval,
+    p_FDR,
+    FDR_significant,
+    n_SNP,
+    min_F,
+    median_F,
+    mean_F,
+    max_F,
+    n_weak
+  ) %>%
+  
+  # pIVW
+  left_join(
+    pivw_final,
+    by = "id.exposure"
+  ) %>%
+  
+  # Weighted median
+  left_join(
+    weighted_median %>%
+      select(id.exposure, b, se, pval) %>%
+      rename(
+        beta_weighted_median = b,
+        se_weighted_median = se,
+        p_weighted_median = pval
+      ),
+    by = "id.exposure"
+  ) %>%
+  
+  # Heterogeneity
+  left_join(
+    heterogeneity_final,
+    by = "id.exposure"
+  ) %>%
+  
+  # MR-Egger pleiotropy
+  left_join(
+    pleiotropy_final,
+    by = "id.exposure"
+  )
+```
+```{r}
+############################################################
+# 16. CALCULATE LOO PER EXPOSURE AND ADD TO FINAL RESULTS 
+############################################################
 
-dev.off()
+loo_summary <- loo_results %>%
+  left_join(
+    final_results %>%
+      select(id.exposure, beta_pIVW),
+    by = "id.exposure"
+  ) %>%
+  filter(SNP != "All") %>%
+  group_by(id.exposure) %>%
+  summarise(
+    loo_no_reversal = if (
+      is.na(first(beta_pIVW)) ||
+      first(beta_pIVW) == 0 ||
+      anyNA(b) ||
+      any(b == 0)
+    ) {
+      FALSE
+    } else {
+      all(sign(b) == sign(first(beta_pIVW)))
+    },
+    n_loo = n(),
+    .groups = "drop"
+  )
 
+final_results <- final_results %>%
+  left_join(
+    loo_summary %>%
+      select(id.exposure, loo_no_reversal, n_loo),
+    by = "id.exposure"
+  )
+```
+
+
+```{r}
+############################################################
+# 17. FINAL RESULTS
+############################################################
+
+final_results %>%
+  arrange(p_FDR)
+```
+```{r}
+############################################################
+# 18. CONFINDENCE CLASSIFICATION
+############################################################
+
+final_results <- final_results %>%
+  mutate(
+    # direction primairy MR-effect (b) versus pIVW (beta_pIVW)
+    direction_consistent = !is.na(b) &
+      !is.na(beta_pIVW) &
+      sign(b) == sign(beta_pIVW) &
+      b != 0 &
+      beta_pIVW != 0,
+
+    core_criteria =
+      !is.na(nsnp) &
+      nsnp >= 3 &
+      !is.na(pval) &
+      pval < 0.05 &
+      !is.na(egger_p) &
+      egger_p >= 0.05 &
+      !is.na(loo_no_reversal) &
+      loo_no_reversal == TRUE &
+      direction_consistent == TRUE &
+      !is.na(FDR_significant) &
+      FDR_significant == TRUE,
+
+    # High confidence: no significant heterogeneity
+    high = as.integer(
+      core_criteria &
+      !is.na(heterogeneity_p) &
+      heterogeneity_p >= 0.05
+    ),
+
+    # Moderate confidence: significant heterogeneity
+    moderate = as.integer(
+      core_criteria &
+      !is.na(heterogeneity_p) &
+      heterogeneity_p < 0.05
+    ),
+
+    # Low confidence: left over genes
+    low = as.integer(
+      high == 0 & moderate == 0
+    )
+  ) %>%
+  select(-direction_consistent, -core_criteria)
+```
+```{r}
+colSums(final_results[, c("high", "moderate", "low")] == 1, na.rm = TRUE)
+
+# Aantal exposures per categorie
+final_results %>%
+  summarise(
+    n_high = sum(high == 1, na.rm = TRUE),
+    n_moderate = sum(moderate == 1, na.rm = TRUE),
+    n_low = sum(low == 1, na.rm = TRUE)
+  )
+```
+```{r}
+############################################################
+# 18. CHECK HIGH AND MODERATE GENES
+############################################################
+
+final_results_filtered <- final_results %>%
+  filter(high == 1 | moderate == 1)
+
+final_results_filtered
+
+```
+```{r}
+############################################################
+# 19. EXPORT
+############################################################
+write.table(harmonised_data, "harmonized_data_sle.txt", sep=";", col.names=T, row.names=F)
+write.table(mr_results, "mr_results_sle.txt", sep=";", col.names=T, row.names=F) 
+write.table(final_results,"MR_sle_final_results.csv", sep=";", col.names=T, row.names=F)
+write.table(heterogeneity_final, "MR_sle_heterogeneity.csv", sep=";", col.names=T, row.names=F)
+write.table(pleiotropy_final, "MR_sle_Egger_intercept.csv", sep=";", col.names=T, row.names=F)
+write.table(loo_results,"MR_sle_leave_one_out.csv", sep=";", col.names=T, row.names=F)
+```
+
+
+
+```{r}
+############################################################
+# 5. PRIMARY MR: RANDOM-EFFECTS IVW
+############################################################
+
+primary_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+
+    # Alleen SNPs die voor MR behouden zijn
+    d <- d %>%
+      filter(mr_keep)
+
+    # Geen SNPs over
+    if (nrow(d) == 0) {
+      return(NULL)
+    }
+
+    # Eén SNP → Wald ratio
+    if (nrow(d) == 1) {
+
+      res <- mr(
+        d,
+        method_list = "mr_wald_ratio"
+      )
+
+    # ≥2 SNPs → IVW random effects
+    } else {
+
+      res <- mr(
+        d,
+        method_list = "mr_ivw_mre"
+      )
+    }
+
+    res
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 6. BH-FDR
+############################################################
+
+primary_results <- primary_results %>%
+  mutate(
+    p_FDR = p.adjust(pval, method = "BH"),
+    FDR_significant = p_FDR < 0.05
+  )
+```
+```{r}
+
+############################################################
+# 7. ADD INSTRUMENT INFO
+############################################################
+
+primary_results <- primary_results %>%
+  left_join(
+    instrument_summary,
+    by = c("id.exposure" = "phenotype")
+  )
+```
+```{r}
+
+############################################################
+# 8. SELECT FDR-SIGNIFICANT GENES
+############################################################
+
+FDR_hits <- primary_results %>%
+  filter(FDR_significant == TRUE) %>%
+  arrange(p_FDR)
+
+FDR_hits
+```
+
+```{r}
+############################################################
+# 9. PENALIZED IVW (pIVW)
+############################################################
+
+pivw_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # only SNPs through harmonisation
+    d <- d %>%
+      filter(mr_keep == TRUE)
+    
+    # Geen SNPs over
+    if (nrow(d) == 0) {
+      return(NULL)
+    }
+    
+    # nr unique SNPs
+    n_snps <- n_distinct(d$SNP)
+    
+    # pIVW minimum of 3 SNPs
+    if (n_snps < 3) {
+      return(NULL)
+    }
+    
+    # Use only complete SNP-info
+    d <- d %>%
+      filter(
+        !is.na(beta.outcome),
+        !is.na(beta.exposure),
+        !is.na(se.outcome),
+        !is.na(se.exposure),
+        se.outcome > 0,
+        se.exposure > 0
+      )
+    
+    # check nr SNPs 
+    n_snps <- n_distinct(d$SNP)
+    
+    if (n_snps < 3) {
+      return(NULL)
+    }
+    
+    # Data for pIVW
+    pivw_data <- d %>%
+      select(
+        beta.outcome,
+        beta.exposure,
+        se.outcome,
+        se.exposure
+      )
+    
+    # pIVW
+    fit <- mr.pivw(
+      data = pivw_data,
+      lambda = 1,
+      plei = TRUE
+    )
+    
+    # Result
+    data.frame(
+      exposure = d$exposure[1],
+      id.exposure = d$id.exposure[1],
+      outcome = d$outcome[1],
+      id.outcome = d$id.outcome[1],
+      nsnp = n_snps,
+      b = fit$beta.hat,
+      se = fit$beta.se,
+      p = fit$`pval (Normal)`
+    )
+  }
+) %>%
+  bind_rows()
+```
+
+```{r}
+
+############################################################
+# 10. WEIGHTED MEDIAN
+############################################################
+
+weighted_median <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # only SNPs used for MR
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Weighted median only ≥3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr(
+        d,
+        method_list = "mr_weighted_median"
+      )
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+
+```{r}
+
+############################################################
+# 11. LEAVE-ONE-OUT
+############################################################
+loo_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # only SNPs used for MR 
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Leave-one-out only ≥3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr_leaveoneout(
+        d,
+        method = mr_ivw_mre
+      )
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 12. HETEROGENEITY
+############################################################
+
+heterogeneity_results <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # only SNPs for MR 
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Heterogeneity only ≥2 SNPs
+    if (n_distinct(d$SNP) >= 2) {
+      
+      mr_heterogeneity(
+        d,
+        method_list = "mr_ivw"
+      )
+      
+    } else {
+      
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 13. MR-EGGER INTERCEPT
+############################################################
+
+pleiotropy <- lapply(
+  split(harmonised_data, harmonised_data$exposure),
+  function(d) {
+    
+    # only SNPs used for MR
+    d <- d %>%
+      filter(mr_keep)
+    
+    # Egger only minimun 3 SNPs
+    if (n_distinct(d$SNP) >= 3) {
+      
+      mr_pleiotropy_test(d)
+      
+    } else {
+      NULL
+    }
+  }
+) %>%
+  bind_rows()
+```
+```{r}
+############################################################
+# 14. PREPARE RESULTS
+############################################################
+pivw_final <- pivw_results %>%
+  select(
+    id.exposure,
+    b,
+    se,
+    p
+  ) %>%
+  rename(
+    beta_pIVW = b,
+    se_pIVW = se,
+    p_pIVW = p
+  )
+
+heterogeneity_final <- heterogeneity_results %>%
+  filter(method == "Inverse variance weighted") %>%
+  select(
+    id.exposure,
+    Q,
+    Q_df,
+    Q_pval
+  ) %>%
+  rename(
+    heterogeneity_Q = Q,
+    heterogeneity_Q_df = Q_df,
+    heterogeneity_p = Q_pval
+  )
+
+pleiotropy_final <- pleiotropy %>%
+  select(
+    id.exposure,
+    egger_intercept,
+    se,
+    pval
+  ) %>%
+  rename(
+    egger_intercept = egger_intercept,
+    egger_se = se,
+    egger_p = pval
+  )
+```
+```{r}
+
+############################################################
+# 15. COMBINE MAIN RESULTS
+############################################################
+
+final_results <- primary_results %>%
+  
+  select(
+    id.exposure,
+    exposure,
+    nsnp,
+    b,
+    se,
+    pval,
+    p_FDR,
+    FDR_significant,
+    n_SNP,
+    min_F,
+    median_F,
+    mean_F,
+    max_F,
+    n_weak
+  ) %>%
+  
+  # pIVW
+  left_join(
+    pivw_final,
+    by = "id.exposure"
+  ) %>%
+  
+  # Weighted median
+  left_join(
+    weighted_median %>%
+      select(id.exposure, b, se, pval) %>%
+      rename(
+        beta_weighted_median = b,
+        se_weighted_median = se,
+        p_weighted_median = pval
+      ),
+    by = "id.exposure"
+  ) %>%
+  
+  # Heterogeneity
+  left_join(
+    heterogeneity_final,
+    by = "id.exposure"
+  ) %>%
+  
+  # MR-Egger pleiotropy
+  left_join(
+    pleiotropy_final,
+    by = "id.exposure"
+  )
+```
+```{r}
+############################################################
+# 16. CALCULATE LOO PER EXPOSURE AND ADD TO FINAL RESULTS 
+############################################################
+
+loo_summary <- loo_results %>%
+  left_join(
+    final_results %>%
+      select(id.exposure, beta_pIVW),
+    by = "id.exposure"
+  ) %>%
+  filter(SNP != "All") %>%
+  group_by(id.exposure) %>%
+  summarise(
+    loo_no_reversal = if (
+      is.na(first(beta_pIVW)) ||
+      first(beta_pIVW) == 0 ||
+      anyNA(b) ||
+      any(b == 0)
+    ) {
+      FALSE
+    } else {
+      all(sign(b) == sign(first(beta_pIVW)))
+    },
+    n_loo = n(),
+    .groups = "drop"
+  )
+
+final_results <- final_results %>%
+  left_join(
+    loo_summary %>%
+      select(id.exposure, loo_no_reversal, n_loo),
+    by = "id.exposure"
+  )
+```
+
+
+```{r}
+############################################################
+# 17. FINAL RESULTS
+############################################################
+
+final_results %>%
+  arrange(p_FDR)
+```
+```{r}
+############################################################
+# 18. CONFINDENCE CLASSIFICATION
+############################################################
+
+final_results <- final_results %>%
+  mutate(
+    # Richting primaire MR-effectschatting versus pIVW
+    direction_consistent = !is.na(b) &
+      !is.na(beta_pIVW) &
+      sign(b) == sign(beta_pIVW) &
+      b != 0 &
+      beta_pIVW != 0,
+
+    core_criteria =
+      !is.na(n_SNP) &
+      n_SNP >= 2 &
+      !is.na(pval) &
+      pval < 0.05 &
+      !is.na(egger_p) &
+      egger_p >= 0.05 &
+      !is.na(loo_no_reversal) &
+      loo_no_reversal == TRUE &
+      direction_consistent == TRUE,
+
+    # High confidence: no significant heterogeneity
+    high = as.integer(
+      core_criteria &
+      !is.na(heterogeneity_p) &
+      heterogeneity_p >= 0.05
+    ),
+
+    # Moderate confidence: significant heterogeneity
+    moderate = as.integer(
+      core_criteria &
+      !is.na(heterogeneity_p) &
+      heterogeneity_p < 0.05
+    ),
+
+    # Low confidence: left over genes
+    low = as.integer(
+      high == 0 & moderate == 0
+    )
+  ) %>%
+  select(-direction_consistent, -core_criteria)
+```
+```{r}
+colSums(final_results[, c("high", "moderate", "low")] == 1, na.rm = TRUE)
+
+# nr exposures per category
+final_results %>%
+  summarise(
+    n_high = sum(high == 1, na.rm = TRUE),
+    n_moderate = sum(moderate == 1, na.rm = TRUE),
+    n_low = sum(low == 1, na.rm = TRUE)
+  )
+```
+```{r}
+############################################################
+# 18. CHECK HIGH AND MODERATE GENES
+############################################################
+
+final_results_filtered <- final_results %>%
+  filter(high == 1 | moderate == 1)
+
+final_results_filtered
+
+```
+```{r}
+############################################################
+# 19. EXPORT
+############################################################
+write.table(harmonised_data, "harmonized_data_sle.csv", sep=";", col.names=T, row.names=F)
+write.table(mr_results, "mr_results_sle.csv", sep=";", col.names=T, row.names=F) 
+write.table(final_results,"MR_sle_final_results.csv", sep=";", col.names=T, row.names=F)
+write.table(heterogeneity_final, "MR_sle_heterogeneity.csv", sep=";", col.names=T, row.names=F)
+write.table(pleiotropy_final, "MR_sle_Egger_intercept.csv", sep=";", col.names=T, row.names=F)
+write.table(loo_results,"MR_sle_leave_one_out.csv", sep=";", col.names=T, row.names=F)
 ```
